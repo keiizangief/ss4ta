@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>4枚神経衰弱 タイムアタック</title>
+  <style>
+    :root {
+      --card-w: 58px;
+      --card-h: 82px;
+    }
+
+    body {
+      margin: 0;
+      padding: 12px;
+      background: radial-gradient(circle at center, #235c36, #0e2917);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    header {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 12px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 24px;
+      border-radius: 30px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .stat-box {
+      font-size: 1rem;
+      font-weight: bold;
+    }
+    .stat-val {
+      font-size: 1.2rem;
+      color: #ffeb3b;
+      font-family: monospace;
+    }
+
+    button {
+      padding: 6px 14px;
+      font-size: 0.9rem;
+      border: none;
+      border-radius: 6px;
+      background: #e67e22;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.1s;
+    }
+    button:active { transform: scale(0.96); }
+
+    /* 横11列 × 縦5段（54枚：上4段×11枚 ＋ 最終段10枚） */
+    #board {
+      display: grid;
+      grid-template-columns: repeat(11, var(--card-w));
+      grid-template-rows: repeat(5, var(--card-h));
+      gap: 8px;
+      perspective: 1000px;
+      justify-content: center;
+    }
+
+    .card {
+      width: var(--card-w);
+      height: var(--card-h);
+      position: relative;
+      cursor: pointer;
+      transform-style: preserve-3d;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+    }
+
+    .card.flipped {
+      transform: rotateY(180deg);
+    }
+
+    /* 揃った瞬間の強調ウェイト演出 */
+    .card.highlight-success {
+      transform: rotateY(180deg) scale(1.08);
+      z-index: 10;
+    }
+    .card.highlight-success .face-front {
+      border: 2px solid #ffd700;
+      box-shadow: 0 0 14px rgba(255, 215, 0, 0.9);
+      background: #fffdf0;
+    }
+
+    /* 回収後の薄い状態 */
+    .card.matched {
+      transform: rotateY(180deg) scale(0.95);
+      opacity: 0.2;
+      pointer-events: none;
+      filter: grayscale(1);
+    }
+
+    .face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 6px;
+      backface-visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+      box-sizing: border-box;
+    }
+
+    /* 裏面 */
+    .face-back {
+      background: repeating-linear-gradient(
+        45deg,
+        #b71c1c,
+        #b71c1c 6px,
+        #c62828 6px,
+        #c62828 12px
+      );
+      border: 2px solid #fff;
+    }
+
+    /* 表面 */
+    .face-front {
+      background: #ffffff;
+      color: #222;
+      transform: rotateY(180deg);
+      border: 1px solid #ccc;
+      font-weight: bold;
+    }
+
+    .rank { font-size: 1.35rem; line-height: 1; }
+    .suit { font-size: 1rem; line-height: 1.1; }
+    .red { color: #d32f2f; }
+    .joker { color: #7b1fa2; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="stat-box">TIME: <span id="time" class="stat-val">00:00.0</span></div>
+    <div class="stat-box">SETS: <span id="matches" class="stat-val">0/14</span></div>
+    <div class="stat-box">BEST: <span id="best" class="stat-val">--:--.-</span></div>
+    <button onclick="initGame()">リセット (R)</button>
+  </header>
+
+  <div id="board"></div>
+
+  <script>
+    const SUITS = ['♠', '♥', '♦', '♣'];
+    const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+    let deck = [];
+    let flippedCards = [];
+    let matchedPairs = 0;
+    let timerStarted = false;
+    let startTime = 0;
+    let timerInterval = null;
+    let isProcessing = false;
+
+    const boardEl = document.getElementById('board');
+    const timeEl = document.getElementById('time');
+    const matchesEl = document.getElementById('matches');
+    const bestEl = document.getElementById('best');
+
+    const savedBest = localStorage.getItem('4match_best');
+    if (savedBest) bestEl.textContent = formatTime(parseInt(savedBest));
+
+    function createDeck() {
+      const cards = [];
+      let id = 0;
+      for (const rank of RANKS) {
+        for (const suit of SUITS) {
+          cards.push({ id: id++, rank, suit, isJoker: false, isRed: (suit === '♥' || suit === '♦') });
+        }
+      }
+      cards.push({ id: id++, rank: 'JK', suit: '★', isJoker: true, isRed: false });
+      cards.push({ id: id++, rank: 'JK', suit: '★', isJoker: true, isRed: true });
+
+      return cards.sort(() => Math.random() - 0.5);
+    }
+
+    function initGame() {
+      clearInterval(timerInterval);
+      isProcessing = false;
+      timerStarted = false;
+      startTime = 0;
+      timeEl.textContent = '00:00.0';
+      matchedPairs = 0;
+      matchesEl.textContent = '0/14';
+      flippedCards = [];
+
+      deck = createDeck();
+      boardEl.innerHTML = '';
+
+      deck.forEach(data => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.id = data.id;
+
+        const suitHtml = data.isJoker ? '' : `<div class="suit ${data.isRed ? 'red' : ''}">${data.suit}</div>`;
+        const rankClass = data.isJoker ? 'joker' : (data.isRed ? 'red' : '');
+
+        card.innerHTML = `
+          <div class="face face-back"></div>
+          <div class="face face-front">
+            <div class="rank ${rankClass}">${data.rank}</div>
+            ${suitHtml}
+          </div>
+        `;
+
+        card.addEventListener('click', () => onCardClick(card, data));
+        boardEl.appendChild(card);
+      });
+    }
+
+    function onCardClick(cardEl, data) {
+      if (isProcessing) return;
+      if (cardEl.classList.contains('flipped') || cardEl.classList.contains('matched')) return;
+
+      if (!timerStarted) {
+        timerStarted = true;
+        startTime = performance.now();
+        timerInterval = setInterval(() => {
+          timeEl.textContent = formatTime(performance.now() - startTime);
+        }, 100);
+      }
+
+      cardEl.classList.add('flipped');
+      flippedCards.push({ el: cardEl, data });
+
+      // ジョーカー判定（2枚）
+      const jokers = flippedCards.filter(c => c.data.isJoker);
+      if (jokers.length === 2) {
+        isProcessing = true;
+        // 一旦探索リストから除外
+        flippedCards = flippedCards.filter(c => !c.data.isJoker);
+        
+        // 揃ったカードを少しの間光らせてウェイト
+        jokers.forEach(c => c.el.classList.add('highlight-success'));
+        setTimeout(() => {
+          jokers.forEach(c => {
+            c.el.classList.remove('highlight-success');
+            c.el.classList.add('matched');
+          });
+          isProcessing = false;
+          onMatched();
+        }, 400);
+      }
+
+      // 4枚判定
+      if (flippedCards.length === 4) {
+        const firstRank = flippedCards[0].data.rank;
+        const allSame = flippedCards.every(c => c.data.rank === firstRank);
+
+        if (allSame) {
+          isProcessing = true;
+          const targets = [...flippedCards];
+          flippedCards = [];
+
+          // 揃った4枚を光らせてウェイト
+          targets.forEach(c => c.el.classList.add('highlight-success'));
+          setTimeout(() => {
+            targets.forEach(c => {
+              c.el.classList.remove('highlight-success');
+              c.el.classList.add('matched');
+            });
+            isProcessing = false;
+            onMatched();
+          }, 400);
+        } else {
+          // 不揃い時は0.8秒待機して裏に戻す
+          isProcessing = true;
+          setTimeout(() => {
+            flippedCards.forEach(c => c.el.classList.remove('flipped'));
+            flippedCards = [];
+            isProcessing = false;
+          }, 800);
+        }
+      }
+    }
+
+    function onMatched() {
+      matchedPairs++;
+      matchesEl.textContent = `${matchedPairs}/14`;
+
+      if (matchedPairs === 14) {
+        clearInterval(timerInterval);
+        const finalTime = performance.now() - startTime;
+        const best = localStorage.getItem('4match_best');
+        if (!best || finalTime < parseInt(best)) {
+          localStorage.setItem('4match_best', Math.floor(finalTime));
+          bestEl.textContent = formatTime(finalTime);
+          setTimeout(() => alert(`オールクリア！ 新記録: ${formatTime(finalTime)}`), 100);
+        } else {
+          setTimeout(() => alert(`オールクリア！ タイム: ${formatTime(finalTime)}`), 100);
+        }
+      }
+    }
+
+    function formatTime(ms) {
+      const min = Math.floor(ms / 60000);
+      const sec = Math.floor((ms % 60000) / 1000);
+      const tenth = Math.floor((ms % 1000) / 100);
+      return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${tenth}`;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'r' || e.key === 'R') initGame();
+    });
+
+    initGame();
+  </script>
+</body>
+</html>
