@@ -26,28 +26,28 @@
 
     header {
       display: flex;
-      gap: 24px;
+      gap: 16px;
       align-items: center;
       margin-bottom: 12px;
       background: rgba(0, 0, 0, 0.5);
-      padding: 8px 24px;
+      padding: 8px 20px;
       border-radius: 30px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
     .stat-box {
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: bold;
     }
     .stat-val {
-      font-size: 1.2rem;
+      font-size: 1.15rem;
       color: #ffeb3b;
       font-family: monospace;
     }
 
     button {
-      padding: 6px 14px;
-      font-size: 0.9rem;
+      padding: 6px 12px;
+      font-size: 0.85rem;
       border: none;
       border-radius: 6px;
       background: #e67e22;
@@ -55,6 +55,9 @@
       font-weight: bold;
       cursor: pointer;
       transition: 0.1s;
+    }
+    button.secondary {
+      background: #2980b9;
     }
     button:active { transform: scale(0.96); }
 
@@ -114,7 +117,6 @@
       box-sizing: border-box;
     }
 
-    /* 裏面 */
     .face-back {
       background: repeating-linear-gradient(
         45deg,
@@ -126,7 +128,6 @@
       border: 2px solid #fff;
     }
 
-    /* 表面 */
     .face-front {
       background: #ffffff;
       color: #222;
@@ -139,18 +140,104 @@
     .suit { font-size: 1rem; line-height: 1.1; }
     .red { color: #d32f2f; }
     .joker { color: #7b1fa2; font-size: 0.85rem; }
+
+    /* ランキング用モーダル */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .modal-overlay.active {
+      visibility: visible;
+      opacity: 1;
+    }
+    .modal-content {
+      background: #1e392a;
+      border: 2px solid #ffd700;
+      border-radius: 12px;
+      padding: 24px;
+      width: 440px;
+      max-width: 90vw;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      text-align: center;
+    }
+    .modal-title {
+      font-size: 1.3rem;
+      margin: 0 0 16px 0;
+      color: #ffd700;
+    }
+    .ranking-container {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .ranking-col {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .ranking-col h3 {
+      margin: 0 0 8px 0;
+      font-size: 0.95rem;
+      border-bottom: 1px solid #555;
+      padding-bottom: 4px;
+      color: #81c784;
+    }
+    .ranking-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-family: monospace;
+      font-size: 0.9rem;
+      text-align: left;
+    }
+    .ranking-list li {
+      padding: 3px 0;
+      display: flex;
+      justify-content: space-between;
+    }
+    .ranking-list .rank-num {
+      color: #ffd700;
+    }
   </style>
 </head>
 <body>
 
   <header>
     <div class="stat-box">TIME: <span id="time" class="stat-val">00:00.0</span></div>
+    <div class="stat-box">TURNS: <span id="turns" class="stat-val">0</span></div>
     <div class="stat-box">SETS: <span id="matches" class="stat-val">0/14</span></div>
-    <div class="stat-box">BEST: <span id="best" class="stat-val">--:--.-</span></div>
     <button onclick="initGame()">リセット (R)</button>
+    <button class="secondary" onclick="openRankingModal()">ランキング</button>
   </header>
 
   <div id="board"></div>
+
+  <!-- ランキングモーダル -->
+  <div id="rankingModal" class="modal-overlay">
+    <div class="modal-content">
+      <h2 class="modal-title" id="modalHeaderTitle">🏆 ハイスコア TOP 5</h2>
+      <div class="ranking-container">
+        <div class="ranking-col">
+          <h3>⏱ タイム</h3>
+          <ul id="timeRankingList" class="ranking-list"></ul>
+        </div>
+        <div class="ranking-col">
+          <h3>🎯 手順数 (ターン)</h3>
+          <ul id="stepRankingList" class="ranking-list"></ul>
+        </div>
+      </div>
+      <button onclick="closeRankingModal()">閉じる</button>
+    </div>
+  </div>
 
   <script>
     const SUITS = ['♠', '♥', '♦', '♣'];
@@ -159,18 +246,21 @@
     let deck = [];
     let flippedCards = [];
     let matchedPairs = 0;
+    let turnCount = 0;
     let timerStarted = false;
     let startTime = 0;
     let timerInterval = null;
     let isProcessing = false;
+    let isGameCleared = false;
 
     const boardEl = document.getElementById('board');
     const timeEl = document.getElementById('time');
+    const turnsEl = document.getElementById('turns');
     const matchesEl = document.getElementById('matches');
-    const bestEl = document.getElementById('best');
 
-    const savedBest = localStorage.getItem('4match_best');
-    if (savedBest) bestEl.textContent = formatTime(parseInt(savedBest));
+    const modalEl = document.getElementById('rankingModal');
+    const timeRankingList = document.getElementById('timeRankingList');
+    const stepRankingList = document.getElementById('stepRankingList');
 
     function createDeck() {
       const cards = [];
@@ -183,15 +273,24 @@
       cards.push({ id: id++, rank: 'JK', suit: '★', isJoker: true, isRed: false });
       cards.push({ id: id++, rank: 'JK', suit: '★', isJoker: true, isRed: true });
 
-      return cards.sort(() => Math.random() - 0.5);
+      // フィッシャー–イェーツ シャッフル
+      for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cards[i], cards[j]] = [cards[j], cards[i]];
+      }
+
+      return cards;
     }
 
     function initGame() {
       clearInterval(timerInterval);
       isProcessing = false;
       timerStarted = false;
+      isGameCleared = false;
       startTime = 0;
       timeEl.textContent = '00:00.0';
+      turnCount = 0;
+      turnsEl.textContent = '0';
       matchedPairs = 0;
       matchesEl.textContent = '0/14';
       flippedCards = [];
@@ -235,14 +334,15 @@
       cardEl.classList.add('flipped');
       flippedCards.push({ el: cardEl, data });
 
-      // ジョーカー判定（2枚）
+      // ジョーカー判定（2枚揃った時）: ジョーカー2枚揃いは1手順としてカウント
       const jokers = flippedCards.filter(c => c.data.isJoker);
       if (jokers.length === 2) {
         isProcessing = true;
-        // 一旦探索リストから除外
+        turnCount++;
+        turnsEl.textContent = turnCount;
+
         flippedCards = flippedCards.filter(c => !c.data.isJoker);
         
-        // 揃ったカードを少しの間光らせてウェイト
         jokers.forEach(c => c.el.classList.add('highlight-success'));
         setTimeout(() => {
           jokers.forEach(c => {
@@ -254,8 +354,11 @@
         }, 400);
       }
 
-      // 4枚判定
+      // 4枚判定: 揃っても不揃いでも「4枚めくった」時点で1手順としてカウント
       if (flippedCards.length === 4) {
+        turnCount++;
+        turnsEl.textContent = turnCount;
+
         const firstRank = flippedCards[0].data.rank;
         const allSame = flippedCards.every(c => c.data.rank === firstRank);
 
@@ -264,7 +367,6 @@
           const targets = [...flippedCards];
           flippedCards = [];
 
-          // 揃った4枚を光らせてウェイト
           targets.forEach(c => c.el.classList.add('highlight-success'));
           setTimeout(() => {
             targets.forEach(c => {
@@ -275,7 +377,6 @@
             onMatched();
           }, 400);
         } else {
-          // 不揃い時は0.8秒待機して裏に戻す
           isProcessing = true;
           setTimeout(() => {
             flippedCards.forEach(c => c.el.classList.remove('flipped'));
@@ -292,15 +393,77 @@
 
       if (matchedPairs === 14) {
         clearInterval(timerInterval);
-        const finalTime = performance.now() - startTime;
-        const best = localStorage.getItem('4match_best');
-        if (!best || finalTime < parseInt(best)) {
-          localStorage.setItem('4match_best', Math.floor(finalTime));
-          bestEl.textContent = formatTime(finalTime);
-          setTimeout(() => alert(`オールクリア！ 新記録: ${formatTime(finalTime)}`), 100);
-        } else {
-          setTimeout(() => alert(`オールクリア！ タイム: ${formatTime(finalTime)}`), 100);
-        }
+        isGameCleared = true;
+        const finalTime = Math.floor(performance.now() - startTime);
+        
+        saveHighScores(finalTime, turnCount);
+        renderRankingLists();
+        
+        document.getElementById('modalHeaderTitle').textContent = `🎉 ゲームクリア！ (${turnCount}ターン / ${formatTime(finalTime)})`;
+        openRankingModal();
+      }
+    }
+
+    // --- ランキング保存・取得処理 ---
+    function getHighScores(key) {
+      try {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveHighScores(newTime, newTurns) {
+      // タイム記録更新 (昇順: 小さい方が上位)
+      let timeScores = getHighScores('4match_ranking_time');
+      timeScores.push(newTime);
+      timeScores.sort((a, b) => a - b);
+      timeScores = timeScores.slice(0, 5);
+      localStorage.setItem('4match_ranking_time', JSON.stringify(timeScores));
+
+      // 手順数記録更新 (昇順: 少ない方が上位)
+      let turnScores = getHighScores('4match_ranking_turns');
+      turnScores.push(newTurns);
+      turnScores.sort((a, b) => a - b);
+      turnScores = turnScores.slice(0, 5);
+      localStorage.setItem('4match_ranking_turns', JSON.stringify(turnScores));
+    }
+
+    function renderRankingLists() {
+      const timeScores = getHighScores('4match_ranking_time');
+      const turnScores = getHighScores('4match_ranking_turns');
+
+      timeRankingList.innerHTML = '';
+      stepRankingList.innerHTML = '';
+
+      for (let i = 0; i < 5; i++) {
+        // タイム
+        const tLi = document.createElement('li');
+        const tVal = timeScores[i] !== undefined ? formatTime(timeScores[i]) : '--:--.-';
+        tLi.innerHTML = `<span class="rank-num">${i + 1}.</span> <span>${tVal}</span>`;
+        timeRankingList.appendChild(tLi);
+
+        // 手数
+        const sLi = document.createElement('li');
+        const sVal = turnScores[i] !== undefined ? `${turnScores[i]} 回` : '-- 回';
+        sLi.innerHTML = `<span class="rank-num">${i + 1}.</span> <span>${sVal}</span>`;
+        stepRankingList.appendChild(sLi);
+      }
+    }
+
+    function openRankingModal() {
+      renderRankingLists();
+      modalEl.classList.add('active');
+    }
+
+    function closeRankingModal() {
+      modalEl.classList.remove('active');
+      document.getElementById('modalHeaderTitle').textContent = '🏆 ハイスコア TOP 5';
+
+      // クリア後にモーダルを閉じた場合は、即座に次のゲームへリセット
+      if (isGameCleared) {
+        initGame();
       }
     }
 
@@ -313,6 +476,7 @@
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'r' || e.key === 'R') initGame();
+      if (e.key === 'Escape') closeRankingModal();
     });
 
     initGame();
