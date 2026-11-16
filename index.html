@@ -2,11 +2,14 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>4枚神経衰弱 タイムアタック</title>
   <style>
     :root {
-      --card-w: 58px;
-      --card-h: 82px;
+      /* 画面幅に合わせて自動縮小（最大58px、狭い画面では横幅に収まるサイズ） */
+      --card-w: min(58px, calc((100vw - 84px) / 11));
+      --card-h: calc(var(--card-w) * 1.41);
+      --grid-gap: min(8px, 1.2vw);
     }
 
     body {
@@ -26,21 +29,25 @@
 
     header {
       display: flex;
-      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px 16px;
       align-items: center;
       margin-bottom: 12px;
       background: rgba(0, 0, 0, 0.5);
-      padding: 8px 20px;
+      padding: 8px 18px;
       border-radius: 30px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      max-width: 95vw;
+      box-sizing: border-box;
     }
 
     .stat-box {
-      font-size: 0.95rem;
+      font-size: clamp(0.8rem, 2.2vw, 0.95rem);
       font-weight: bold;
     }
     .stat-val {
-      font-size: 1.15rem;
+      font-size: clamp(0.95rem, 2.6vw, 1.15rem);
       color: #ffeb3b;
       font-family: monospace;
     }
@@ -54,19 +61,50 @@
       color: white;
       font-weight: bold;
       cursor: pointer;
-      transition: 0.1s;
+      transition: 0.15s;
     }
     button.secondary {
       background: #2980b9;
     }
+    button.x-share-btn {
+      background: #0f1419;
+      border: 1px solid #536471;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button.x-share-btn:hover {
+      background: #272c30;
+    }
+    button.copy-btn {
+      background: #2e7d32;
+      border: 1px solid #66bb6a;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    button.copy-btn:hover {
+      background: #388e3c;
+    }
+    button.copy-btn.copied {
+      background: #1b5e20;
+      border-color: #a5d6a7;
+    }
     button:active { transform: scale(0.96); }
+
+    .modal-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
 
     /* 横11列 × 縦5段（54枚：上4段×11枚 ＋ 最終段10枚） */
     #board {
       display: grid;
       grid-template-columns: repeat(11, var(--card-w));
       grid-template-rows: repeat(5, var(--card-h));
-      gap: 8px;
+      gap: var(--grid-gap);
       perspective: 1000px;
       justify-content: center;
     }
@@ -107,7 +145,7 @@
       position: absolute;
       width: 100%;
       height: 100%;
-      border-radius: 6px;
+      border-radius: max(4px, calc(var(--card-w) * 0.1));
       backface-visibility: hidden;
       display: flex;
       flex-direction: column;
@@ -136,10 +174,10 @@
       font-weight: bold;
     }
 
-    .rank { font-size: 1.35rem; line-height: 1; }
-    .suit { font-size: 1rem; line-height: 1.1; }
+    .rank { font-size: clamp(0.75rem, calc(var(--card-w) * 0.38), 1.35rem); line-height: 1; }
+    .suit { font-size: clamp(0.6rem, calc(var(--card-w) * 0.28), 1rem); line-height: 1.1; }
     .red { color: #d32f2f; }
-    .joker { color: #7b1fa2; font-size: 0.85rem; }
+    .joker { color: #7b1fa2; font-size: clamp(0.55rem, calc(var(--card-w) * 0.25), 0.85rem); }
 
     /* ランキング用モーダル */
     .modal-overlay {
@@ -162,21 +200,27 @@
       background: #1e392a;
       border: 2px solid #ffd700;
       border-radius: 12px;
-      padding: 24px;
-      width: 440px;
-      max-width: 90vw;
+      padding: 20px;
+      width: 480px;
+      max-width: 94vw;
       box-shadow: 0 10px 25px rgba(0,0,0,0.6);
       text-align: center;
+      box-sizing: border-box;
     }
     .modal-title {
-      font-size: 1.3rem;
+      font-size: clamp(1.05rem, 3.5vw, 1.3rem);
       margin: 0 0 16px 0;
       color: #ffd700;
     }
     .ranking-container {
       display: flex;
-      gap: 16px;
+      gap: 12px;
       margin-bottom: 20px;
+    }
+    @media (max-width: 460px) {
+      .ranking-container {
+        flex-direction: column;
+      }
     }
     .ranking-col {
       flex: 1;
@@ -200,9 +244,46 @@
       text-align: left;
     }
     .ranking-list li {
-      padding: 3px 0;
+      padding: 6px;
+      border-radius: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .ranking-list li:last-child {
+      border-bottom: none;
+    }
+    .score-main-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
+    }
+    .score-sub-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.74rem;
+      color: #b0bec5;
+      padding-left: 1.4em;
+    }
+    /* 今回の記録ハイライト */
+    .ranking-list li.new-record {
+      background: rgba(255, 215, 0, 0.22);
+      color: #fff59d;
+      font-weight: bold;
+    }
+    .ranking-list li.new-record .score-sub-row {
+      color: #ffe082;
+      font-weight: normal;
+    }
+    .new-badge {
+      background: #ff5722;
+      color: #fff;
+      font-size: 0.65rem;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 4px;
+      font-family: sans-serif;
     }
     .ranking-list .rank-num {
       color: #ffd700;
@@ -216,7 +297,7 @@
     <div class="stat-box">TURNS: <span id="turns" class="stat-val">0</span></div>
     <div class="stat-box">SETS: <span id="matches" class="stat-val">0/14</span></div>
     <button onclick="initGame()">リセット (R)</button>
-    <button class="secondary" onclick="openRankingModal()">ランキング</button>
+    <button class="secondary" onclick="openRankingModal(false)">ランキング</button>
   </header>
 
   <div id="board"></div>
@@ -235,7 +316,11 @@
           <ul id="stepRankingList" class="ranking-list"></ul>
         </div>
       </div>
-      <button onclick="closeRankingModal()">閉じる</button>
+      <div class="modal-actions">
+        <button class="x-share-btn" onclick="shareToX()">𝕏 に投稿</button>
+        <button id="copyResultBtn" class="copy-btn" onclick="copyResult()">📋 結果をコピー</button>
+        <button onclick="closeRankingModal()">閉じる</button>
+      </div>
     </div>
   </div>
 
@@ -253,6 +338,11 @@
     let isProcessing = false;
     let isGameCleared = false;
 
+    // 今回のクリア記録（ハイライト＆シェア用）
+    let latestRecordId = null;
+    let lastClearResult = null;
+    let copyResetTimer = null;
+
     const boardEl = document.getElementById('board');
     const timeEl = document.getElementById('time');
     const turnsEl = document.getElementById('turns');
@@ -261,6 +351,7 @@
     const modalEl = document.getElementById('rankingModal');
     const timeRankingList = document.getElementById('timeRankingList');
     const stepRankingList = document.getElementById('stepRankingList');
+    const copyResultBtn = document.getElementById('copyResultBtn');
 
     function createDeck() {
       const cards = [];
@@ -287,6 +378,7 @@
       isProcessing = false;
       timerStarted = false;
       isGameCleared = false;
+      lastClearResult = null;
       startTime = 0;
       timeEl.textContent = '00:00.0';
       turnCount = 0;
@@ -334,14 +426,15 @@
       cardEl.classList.add('flipped');
       flippedCards.push({ el: cardEl, data });
 
-      // ジョーカー判定（2枚揃った時）: ジョーカー2枚揃いは1手順としてカウント
+      // ジョーカー判定（2枚揃った時）: 他のめくりかけカードも含めて1ターン終了とする
       const jokers = flippedCards.filter(c => c.data.isJoker);
       if (jokers.length === 2) {
         isProcessing = true;
         turnCount++;
         turnsEl.textContent = turnCount;
 
-        flippedCards = flippedCards.filter(c => !c.data.isJoker);
+        const others = flippedCards.filter(c => !c.data.isJoker);
+        flippedCards = [];
         
         jokers.forEach(c => c.el.classList.add('highlight-success'));
         setTimeout(() => {
@@ -349,9 +442,11 @@
             c.el.classList.remove('highlight-success');
             c.el.classList.add('matched');
           });
+          others.forEach(c => c.el.classList.remove('flipped'));
           isProcessing = false;
           onMatched();
         }, 400);
+        return;
       }
 
       // 4枚判定: 揃っても不揃いでも「4枚めくった」時点で1手順としてカウント
@@ -396,41 +491,122 @@
         isGameCleared = true;
         const finalTime = Math.floor(performance.now() - startTime);
         
-        saveHighScores(finalTime, turnCount);
-        renderRankingLists();
+        lastClearResult = { time: finalTime, turns: turnCount };
+        latestRecordId = saveHighScores(finalTime, turnCount);
         
         document.getElementById('modalHeaderTitle').textContent = `🎉 ゲームクリア！ (${turnCount}ターン / ${formatTime(finalTime)})`;
-        openRankingModal();
+        openRankingModal(true);
       }
+    }
+
+    // --- シェア用テキスト生成 ---
+    function buildShareText() {
+      if (isGameCleared && lastClearResult) {
+        return `「4枚神経衰弱 タイムアタック」をクリア！\n⏱ タイム：${formatTime(lastClearResult.time)}\n🎯 手順数：${lastClearResult.turns}ターン\n#4枚神経衰弱`;
+      }
+      const timeScores = getHighScores('4match_ranking_time');
+      const turnScores = getHighScores('4match_ranking_turns');
+      const bestTime = timeScores[0] ? formatTime(timeScores[0].time) : '--:--.-';
+      const bestTurns = turnScores[0] ? `${turnScores[0].turns}ターン` : '--ターン';
+      return `「4枚神経衰弱 タイムアタック」のマイベスト記録！\n⏱ 最速タイム：${bestTime}\n🎯 最少手順数：${bestTurns}\n#4枚神経衰弱`;
+    }
+
+    // --- X（旧Twitter）投稿画面を開く ---
+    function shareToX() {
+      const text = buildShareText();
+      const isWebUrl = /^https?:\/\//.test(window.location.href);
+      const urlParam = isWebUrl ? `&url=${encodeURIComponent(window.location.href)}` : '';
+      const intentUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}${urlParam}`;
+
+      window.open(intentUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    // --- 結果をクリップボードへコピー ---
+    async function copyResult() {
+      let text = buildShareText();
+      if (/^https?:\/\//.test(window.location.href)) {
+        text += `\n${window.location.href}`;
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        // file:// 等の制限環境向けフォールバック
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+
+      clearTimeout(copyResetTimer);
+      copyResultBtn.textContent = '✅ コピー完了！';
+      copyResultBtn.classList.add('copied');
+      copyResetTimer = setTimeout(() => {
+        copyResultBtn.textContent = '📋 結果をコピー';
+        copyResultBtn.classList.remove('copied');
+      }, 2000);
     }
 
     // --- ランキング保存・取得処理 ---
     function getHighScores(key) {
       try {
         const data = localStorage.getItem(key);
-        return data ? JSON.parse(data) : [];
+        if (!data) return [];
+        const parsed = JSON.parse(data);
+        return parsed.map(item => {
+          if (typeof item === 'number') {
+            return key === '4match_ranking_time'
+              ? { id: null, time: item, turns: null, date: '----/--/--' }
+              : { id: null, time: null, turns: item, date: '----/--/--' };
+          }
+          return {
+            ...item,
+            date: item.date ? item.date.split(' ')[0] : '----/--/--'
+          };
+        });
       } catch (e) {
         return [];
       }
     }
 
+    function formatDate(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}/${m}/${d}`;
+    }
+
     function saveHighScores(newTime, newTurns) {
-      // タイム記録更新 (昇順: 小さい方が上位)
+      const recordId = Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+      const record = {
+        id: recordId,
+        time: newTime,
+        turns: newTurns,
+        date: formatDate(new Date())
+      };
+
+      // タイム記録更新 (昇順: 小さい方が上位、同タイムなら手数が少ない順)
       let timeScores = getHighScores('4match_ranking_time');
-      timeScores.push(newTime);
-      timeScores.sort((a, b) => a - b);
+      timeScores.push(record);
+      timeScores.sort((a, b) => (a.time - b.time) || ((a.turns ?? 9999) - (b.turns ?? 9999)));
       timeScores = timeScores.slice(0, 5);
       localStorage.setItem('4match_ranking_time', JSON.stringify(timeScores));
 
-      // 手順数記録更新 (昇順: 少ない方が上位)
+      // 手順数記録更新 (昇順: 少ない方が上位、同手数ならタイムが速い順)
       let turnScores = getHighScores('4match_ranking_turns');
-      turnScores.push(newTurns);
-      turnScores.sort((a, b) => a - b);
+      turnScores.push(record);
+      turnScores.sort((a, b) => (a.turns - b.turns) || ((a.time ?? Infinity) - (b.time ?? Infinity)));
       turnScores = turnScores.slice(0, 5);
       localStorage.setItem('4match_ranking_turns', JSON.stringify(turnScores));
+
+      return recordId;
     }
 
-    function renderRankingLists() {
+    function renderRankingLists(highlightLatest = false) {
       const timeScores = getHighScores('4match_ranking_time');
       const turnScores = getHighScores('4match_ranking_turns');
 
@@ -438,22 +614,70 @@
       stepRankingList.innerHTML = '';
 
       for (let i = 0; i < 5; i++) {
-        // タイム
+        // --- タイムランキング ---
         const tLi = document.createElement('li');
-        const tVal = timeScores[i] !== undefined ? formatTime(timeScores[i]) : '--:--.-';
-        tLi.innerHTML = `<span class="rank-num">${i + 1}.</span> <span>${tVal}</span>`;
+        const tItem = timeScores[i];
+        if (tItem) {
+          const isNew = highlightLatest && latestRecordId && tItem.id === latestRecordId;
+          if (isNew) tLi.classList.add('new-record');
+          const subTurns = tItem.turns !== null ? `${tItem.turns}回` : '--回';
+          tLi.innerHTML = `
+            <div class="score-main-row">
+              <span><span class="rank-num">${i + 1}.</span> ${formatTime(tItem.time)}</span>
+              ${isNew ? '<span class="new-badge">NEW</span>' : ''}
+            </div>
+            <div class="score-sub-row">
+              <span>${subTurns}</span>
+              <span>${tItem.date}</span>
+            </div>
+          `;
+        } else {
+          tLi.innerHTML = `
+            <div class="score-main-row">
+              <span><span class="rank-num">${i + 1}.</span> --:--.-</span>
+            </div>
+            <div class="score-sub-row">
+              <span>--回</span>
+              <span>----/--/--</span>
+            </div>
+          `;
+        }
         timeRankingList.appendChild(tLi);
 
-        // 手数
+        // --- 手順数ランキング ---
         const sLi = document.createElement('li');
-        const sVal = turnScores[i] !== undefined ? `${turnScores[i]} 回` : '-- 回';
-        sLi.innerHTML = `<span class="rank-num">${i + 1}.</span> <span>${sVal}</span>`;
+        const sItem = turnScores[i];
+        if (sItem) {
+          const isNew = highlightLatest && latestRecordId && sItem.id === latestRecordId;
+          if (isNew) sLi.classList.add('new-record');
+          const subTime = sItem.time !== null ? formatTime(sItem.time) : '--:--.-';
+          sLi.innerHTML = `
+            <div class="score-main-row">
+              <span><span class="rank-num">${i + 1}.</span> ${sItem.turns} 回</span>
+              ${isNew ? '<span class="new-badge">NEW</span>' : ''}
+            </div>
+            <div class="score-sub-row">
+              <span>${subTime}</span>
+              <span>${sItem.date}</span>
+            </div>
+          `;
+        } else {
+          sLi.innerHTML = `
+            <div class="score-main-row">
+              <span><span class="rank-num">${i + 1}.</span> -- 回</span>
+            </div>
+            <div class="score-sub-row">
+              <span>--:--.-</span>
+              <span>----/--/--</span>
+            </div>
+          `;
+        }
         stepRankingList.appendChild(sLi);
       }
     }
 
-    function openRankingModal() {
-      renderRankingLists();
+    function openRankingModal(highlightLatest = false) {
+      renderRankingLists(highlightLatest);
       modalEl.classList.add('active');
     }
 
@@ -461,11 +685,22 @@
       modalEl.classList.remove('active');
       document.getElementById('modalHeaderTitle').textContent = '🏆 ハイスコア TOP 5';
 
+      // コピーボタンの表示を元に戻す
+      clearTimeout(copyResetTimer);
+      copyResultBtn.textContent = '📋 結果をコピー';
+      copyResultBtn.classList.remove('copied');
+
       // クリア後にモーダルを閉じた場合は、即座に次のゲームへリセット
       if (isGameCleared) {
         initGame();
       }
     }
+
+    modalEl.addEventListener('click', (e) => {
+      if (e.target === modalEl) {
+        closeRankingModal();
+      }
+    });
 
     function formatTime(ms) {
       const min = Math.floor(ms / 60000);
